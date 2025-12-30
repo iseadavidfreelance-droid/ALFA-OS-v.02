@@ -1,0 +1,5 @@
+{
+  "name": "ALFA OS Genesis Kernel Schema",
+  "description": "TypeScript definitions and schema documentation for ALFA OS v0.2 Genesis Kernel database.",
+  "requestFramePermissions": []
+}
