@@ -6,6 +6,7 @@ import Layout from './Layout';
 import Arena from './Arena';
 import BioLab from './BioLab';
 import Swarm from './Swarm';
+import BlackBox from './BlackBox';
 import MissionBoard from './MissionBoard';
 import CLI from './CLI';
 import BiosPanel from './BiosPanel';
@@ -206,17 +207,7 @@ export default function App() {
       break;
 
     case 'DELTA':
-      mainframeContent = (
-        <div className="w-full h-full flex items-center justify-center bg-void-black border border-dashed border-matrix-green/30 p-8">
-           <div className="text-center font-mono space-y-2">
-             <div className="text-3xl animate-pulse text-matrix-green/50">⚠️</div>
-             <div className="text-matrix-green tracking-widest">
-               {`>> SPECTRUM [${activeSpectrum}] // MODULE NOT INSTALLED`}
-             </div>
-             <div className="text-xs text-matrix-green/40">ACCESS RESTRICTED BY KERNEL POLICY</div>
-           </div>
-        </div>
-      );
+      mainframeContent = <BlackBox assets={assets} />;
       break;
   }
 
