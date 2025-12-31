@@ -40,6 +40,7 @@ export interface Database {
           name: string | null
           type: Database["public"]["Enums"]["matrix_type"]
           created_at: string
+          is_active: boolean | null
         }
         Insert: {
           id?: string
@@ -47,6 +48,7 @@ export interface Database {
           name?: string | null
           type?: Database["public"]["Enums"]["matrix_type"]
           created_at?: string
+          is_active?: boolean | null
         }
         Update: {
           id?: string
@@ -54,6 +56,7 @@ export interface Database {
           name?: string | null
           type?: Database["public"]["Enums"]["matrix_type"]
           created_at?: string
+          is_active?: boolean | null
         }
         Relationships: []
       }
@@ -73,6 +76,7 @@ export interface Database {
           lifecycle_state: Database["public"]["Enums"]["lifecycle_stage"] | null
           created_at: string
           last_synced_at: string | null
+          is_retired: boolean | null
         }
         Insert: {
           id?: string
@@ -89,6 +93,7 @@ export interface Database {
           lifecycle_state?: Database["public"]["Enums"]["lifecycle_stage"] | null
           created_at?: string
           last_synced_at?: string | null
+          is_retired?: boolean | null
         }
         Update: {
           id?: string
@@ -105,6 +110,7 @@ export interface Database {
           lifecycle_state?: Database["public"]["Enums"]["lifecycle_stage"] | null
           created_at?: string
           last_synced_at?: string | null
+          is_retired?: boolean | null
         }
         Relationships: [
           {
@@ -167,26 +173,29 @@ export interface Database {
       transactions: {
         Row: {
           id: string
-          payhip_transaction_id: string
+          payhip_transaction_id: string | null
           asset_id: string
           amount: number
           currency: string | null
+          source: string | null
           occurred_at: string | null
         }
         Insert: {
           id?: string
-          payhip_transaction_id: string
+          payhip_transaction_id?: string | null
           asset_id: string
           amount: number
           currency?: string | null
+          source?: string | null
           occurred_at?: string | null
         }
         Update: {
           id?: string
-          payhip_transaction_id?: string
+          payhip_transaction_id?: string | null
           asset_id?: string
           amount?: number
           currency?: string | null
+          source?: string | null
           occurred_at?: string | null
         }
         Relationships: [
@@ -203,7 +212,18 @@ export interface Database {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      trigger_reignite: {
+        Args: {
+          target_asset_id: string
+        }
+        Returns: void
+      }
+      recalculate_asset_score: {
+        Args: {
+          target_asset_id: string
+        }
+        Returns: void
+      }
     }
     Enums: {
       rarity_tier: 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY'
