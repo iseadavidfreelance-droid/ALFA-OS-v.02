@@ -1,6 +1,6 @@
 // @ts-ignore: Deno types
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { Database, Tables } from '../../../database.types.ts'
+import { Database } from '../../../database.types.ts'
 import { calculateAssetScore } from '../_shared/asset-logic.ts'
 
 declare const Deno: {

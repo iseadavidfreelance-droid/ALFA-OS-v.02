@@ -201,26 +201,8 @@ export default function App() {
   let mainframeContent;
   switch (activeSpectrum) {
     case 'ALPHA':
-      mainframeContent = loading ? (
-        <div className="w-full h-full bg-void-black flex flex-col items-center justify-center p-8 space-y-4">
-          <div className="w-16 h-16 border-4 border-t-matrix-green border-r-transparent border-b-matrix-green border-l-transparent rounded-full animate-spin"></div>
-          <div className="font-mono text-matrix-green text-sm tracking-widest animate-pulse">
-            DECODING MATRIX STREAM...
-          </div>
-        </div>
-      ) : (
-        assets.length > 0 ? (
-          <Arena assets={assets} />
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center text-matrix-green/30 font-mono space-y-4">
-             <div className="text-4xl opacity-20">∅</div>
-             <div className="text-sm tracking-widest">LOCAL DATABASE EMPTY</div>
-             <div className="text-xs border border-matrix-green/20 px-2 py-1 cursor-pointer hover:bg-matrix-green/10 transition-colors" onClick={() => setShowGenesis(true)}>
-               [ INITIATE GENESIS ]
-             </div>
-          </div>
-        )
-      );
+      // Arena is now autonomous, no props needed
+      mainframeContent = <Arena />;
       break;
     
     case 'BETA':

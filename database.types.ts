@@ -87,7 +87,7 @@ export interface Database {
           payhip_link?: string | null
           cached_traffic_score?: number | null
           cached_revenue_score?: number | null
-          // total_score is generated always, usually excluded from inserts
+          // total_score is generated always
           current_rarity?: Database["public"]["Enums"]["rarity_tier"] | null
           highest_rarity_achieved?: Database["public"]["Enums"]["rarity_tier"] | null
           lifecycle_state?: Database["public"]["Enums"]["lifecycle_stage"] | null
@@ -209,7 +209,46 @@ export interface Database {
       }
     }
     Views: {
-      [_ in never]: never
+      v_asset_health_check: {
+        Row: {
+          // Original Asset Fields
+          id: string
+          primary_matrix_id: string | null
+          secondary_matrix_id: string | null
+          sku_slug: string
+          drive_link: string | null
+          payhip_link: string | null
+          cached_traffic_score: number | null
+          cached_revenue_score: number | null
+          total_score: number | null
+          current_rarity: Database["public"]["Enums"]["rarity_tier"] | null
+          highest_rarity_achieved: Database["public"]["Enums"]["rarity_tier"] | null
+          lifecycle_state: Database["public"]["Enums"]["lifecycle_stage"] | null
+          created_at: string
+          last_synced_at: string | null
+          is_retired: boolean | null
+          
+          // Augmented View Fields
+          link_status: 'CRITICAL' | 'WARNING' | 'OK' | null
+          pin_count: number | null
+          last_sale_at: string | null
+          days_since_sale: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assets_primary_matrix_id_fkey"
+            columns: ["primary_matrix_id"]
+            referencedRelation: "matrices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assets_secondary_matrix_id_fkey"
+            columns: ["secondary_matrix_id"]
+            referencedRelation: "matrices"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Functions: {
       trigger_reignite: {
@@ -236,6 +275,20 @@ export interface Database {
   }
 }
 
-// Helpers for easier access in application code
-export type Tables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Row']
-export type Enums<T extends keyof Database['public']['Enums']> = Database['public']['Enums'][T]
+// === EXPORTED INTERFACES FOR APP CONSUMPTION ===
+
+// The Raw Table Row (Useful for Inserts/Updates)
+export type AssetRow = Database['public']['Tables']['assets']['Row'];
+
+// The Enriched Asset (Used in Frontend Views / Intelligence Layers)
+// Prefer this type for Arena, Swarm, and Cards.
+export type Asset = Database['public']['Views']['v_asset_health_check']['Row'];
+
+// Matrix Type
+export type Matrix = Database['public']['Tables']['matrices']['Row'];
+
+// Helper for Enums
+export type Enums<T extends keyof Database['public']['Enums']> = Database['public']['Enums'][T];
+
+// Helper for Tables
+export type Tables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Row'];
