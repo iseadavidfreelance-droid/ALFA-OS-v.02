@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { Database } from './database.types';
 import Layout from './Layout';
 // Telemetry se reemplaza/integra en el nuevo Header compuesto
-import Mainframe from './Mainframe';
+import Arena from './Arena';
 import MissionBoard from './MissionBoard';
 import CLI from './CLI';
 import BiosPanel from './BiosPanel';
@@ -181,7 +181,7 @@ export default function App() {
           </div>
         </div>
       ) : (
-        <Mainframe assets={assets} />
+        <Arena assets={assets} />
       );
       break;
     
