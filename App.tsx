@@ -24,6 +24,7 @@ export default function App() {
   const [logs, setLogs] = useState<string[]>(['>> OMNISCIENT KERNEL v0.2 LOADED.', '>> WAITING FOR INPUT...']);
   const [showBios, setShowBios] = useState(false);
   const [showGenesis, setShowGenesis] = useState(false);
+  const [telemetryAlert, setTelemetryAlert] = useState(false); // Visual Pulse for Revenue
 
   // === GENESIS FORM STATE ===
   const [genesisForm, setGenesisForm] = useState({ pri: '', sec: '' });
@@ -36,7 +37,9 @@ export default function App() {
 
   // === DATA FETCHING ===
   const fetchData = async () => {
-    setLoading(true);
+    // Solo mostramos loading global en la carga inicial, no en refrescos de realtime
+    if (assets.length === 0) setLoading(true);
+    
     try {
       const { data, error } = await supabase
         .from('assets')
@@ -45,7 +48,7 @@ export default function App() {
 
       if (error) throw error;
       setAssets(data || []);
-      addLog(`[SYSTEM] SYNC COMPLETE. ${data?.length} ACTIVE UNITS.`);
+      if (assets.length === 0) addLog(`[SYSTEM] SYNC COMPLETE. ${data?.length} ACTIVE UNITS.`);
     } catch (err) {
       addLog(`[ERROR] DATA FETCH FAILED: ${err instanceof Error ? err.message : 'Unknown'}`);
     } finally {
@@ -55,6 +58,62 @@ export default function App() {
 
   useEffect(() => {
     fetchData();
+  }, []);
+
+  // === REALTIME NERVOUS SYSTEM ===
+  useEffect(() => {
+    const channel = supabase.channel('sentinel-link')
+      // 1. LISTEN: NEW TRANSACTIONS (Revenue Pulse)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'transactions' },
+        (payload) => {
+          const newTx = payload.new as any;
+          addLog(`[ALERT] $$$ NEW TRANSACTION DETECTED: $${newTx.amount} (ID: ${newTx.payhip_transaction_id})`);
+          
+          // Trigger Visual Alert
+          setTelemetryAlert(true);
+          setTimeout(() => setTelemetryAlert(false), 3000);
+
+          // Refresh Data to calculate totals correctly
+          fetchData();
+        }
+      )
+      // 2. LISTEN: ASSET UPDATES (Live Score/Rarity Changes)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'assets' },
+        (payload) => {
+          const updatedAsset = payload.new as AssetRow;
+          
+          // Optimistic UI Update: Replace the item in the array immediately
+          setAssets((prevAssets) => 
+            prevAssets.map((a) => a.id === updatedAsset.id ? updatedAsset : a)
+              .sort((a, b) => (b.total_score || 0) - (a.total_score || 0)) // Re-sort locally
+          );
+
+          addLog(`[UPDATE] ASSET ${updatedAsset.sku_slug} METRICS REFRESHED.`);
+        }
+      )
+      // 3. LISTEN: NEW PINS (Radar Activity)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'pins' },
+        (payload) => {
+          const newPin = payload.new as any;
+          addLog(`[RADAR] NEW SIGNAL DETECTED: ${newPin.external_pin_id}. SCANNING FOR ORPHANS...`);
+          // Note: MissionBoard handles its own scan logic, but we inform the operator here.
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          addLog('>> REALTIME UPLINK ESTABLISHED. LISTENING FOR EVENTS...');
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // === GENESIS LOGIC ===
@@ -111,6 +170,7 @@ export default function App() {
         case 'refresh':
         case 'reload':
           await fetchData();
+          addLog('[SYS] MANUAL REFRESH EXECUTED.');
           break;
 
         case 'scan leaks':
@@ -229,7 +289,8 @@ export default function App() {
           <Telemetry 
             totalRevenue={totalRevenue} 
             totalTraffic={totalTraffic} 
-            assetsCount={assets.length} 
+            assetsCount={assets.length}
+            alertMode={telemetryAlert} 
           />
         }
 
