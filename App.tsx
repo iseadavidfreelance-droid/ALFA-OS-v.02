@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { Database } from './database.types';
-import AssetCard from './AssetCard';
-import MatrixDeck from './MatrixDeck';
+import Layout from './Layout';
+import Telemetry from './Telemetry';
+import Mainframe from './Mainframe';
 import MissionBoard from './MissionBoard';
 import CLI from './CLI';
-import Layout from './Layout';
+import BiosPanel from './BiosPanel';
 
 // === SUPABASE CLIENT ===
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://placeholder.supabase.co';
@@ -13,18 +14,20 @@ const supabaseKey = process.env.REACT_APP_SUPABASE_ANON_KEY || 'placeholder-key'
 const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
 type AssetRow = Database['public']['Tables']['assets']['Row'];
-type MatrixRow = Database['public']['Tables']['matrices']['Row'];
 
 export default function App() {
   // === STATE: DATA LAYER ===
   const [assets, setAssets] = useState<AssetRow[]>([]);
-  const [matrices, setMatrices] = useState<MatrixRow[]>([]);
+  const [loading, setLoading] = useState(true);
   
   // === STATE: UI LAYER ===
-  const [logs, setLogs] = useState<string[]>(['>> SYSTEM BOOT SEQUENCE INITIATED...', '>> KERNEL v0.2 LOADED.']);
-  const [viewMode, setViewMode] = useState<'DASHBOARD' | 'ASSETS'>('DASHBOARD');
-  const [selectedMatrix, setSelectedMatrix] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [logs, setLogs] = useState<string[]>(['>> OMNISCIENT KERNEL v0.2 LOADED.', '>> WAITING FOR INPUT...']);
+  const [showBios, setShowBios] = useState(false);
+  const [showGenesis, setShowGenesis] = useState(false);
+
+  // === GENESIS FORM STATE ===
+  const [genesisForm, setGenesisForm] = useState({ pri: '', sec: '' });
+  const [genesisStatus, setGenesisStatus] = useState<string | null>(null);
 
   // === HELPERS ===
   const addLog = (msg: string) => {
@@ -35,18 +38,14 @@ export default function App() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [assetsRes, matricesRes] = await Promise.all([
-        supabase.from('assets').select('*').order('total_score', { ascending: false }),
-        supabase.from('matrices').select('*').order('code')
-      ]);
+      const { data, error } = await supabase
+        .from('assets')
+        .select('*')
+        .order('total_score', { ascending: false });
 
-      if (assetsRes.error) throw assetsRes.error;
-      if (matricesRes.error) throw matricesRes.error;
-
-      setAssets(assetsRes.data || []);
-      setMatrices(matricesRes.data || []);
-      
-      addLog(`[SYSTEM] DATA SYNC COMPLETE. ${assetsRes.data?.length} ASSETS, ${matricesRes.data?.length} MATRICES LOADED.`);
+      if (error) throw error;
+      setAssets(data || []);
+      addLog(`[SYSTEM] SYNC COMPLETE. ${data?.length} ACTIVE UNITS.`);
     } catch (err) {
       addLog(`[ERROR] DATA FETCH FAILED: ${err instanceof Error ? err.message : 'Unknown'}`);
     } finally {
@@ -58,6 +57,40 @@ export default function App() {
     fetchData();
   }, []);
 
+  // === GENESIS LOGIC ===
+  const handleGenesisSeed = async () => {
+    if (!genesisForm.pri || !genesisForm.sec) {
+      setGenesisStatus('[ERROR] BOTH MATRIX CODES REQUIRED');
+      return;
+    }
+    setGenesisStatus('SEEDING NEW REALITY...');
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('genesis-seed', {
+        body: { 
+          primary_matrix_code: genesisForm.pri.toUpperCase(), 
+          secondary_matrix_code: genesisForm.sec.toUpperCase() 
+        }
+      });
+
+      if (error) throw error;
+      
+      setGenesisStatus(`SUCCESS: ${data.data.sku_slug} CREATED.`);
+      addLog(`[GENESIS] NEW ASSET BORN: ${data.data.sku_slug}`);
+      setGenesisForm({ pri: '', sec: '' });
+      await fetchData();
+      
+      // Auto-close after delay
+      setTimeout(() => {
+        setShowGenesis(false);
+        setGenesisStatus(null);
+      }, 1500);
+
+    } catch (err) {
+      setGenesisStatus(`FAILURE: ${err instanceof Error ? err.message : 'Unknown'}`);
+    }
+  };
+
   // === COMMAND BRIDGE ===
   const handleCommand = async (cmd: string) => {
     const command = cmd.toLowerCase().trim();
@@ -65,17 +98,31 @@ export default function App() {
 
     try {
       switch (command) {
+        case 'bios':
+          setShowBios(prev => !prev);
+          addLog(`[UI] BIOS PANEL ${!showBios ? 'OPENED' : 'CLOSED'}.`);
+          break;
+
+        case 'genesis':
+          setShowGenesis(prev => !prev);
+          addLog(`[UI] GENESIS PROTOCOL ${!showGenesis ? 'INITIATED' : 'ABORTED'}.`);
+          break;
+
+        case 'refresh':
+        case 'reload':
+          await fetchData();
+          break;
+
         case 'scan leaks':
           addLog('[CMD] INITIATING ORPHAN SCAN PROTOCOL...');
           const { data: scanData, error: scanError } = await supabase.functions.invoke('scan-orphans');
           if (scanError) throw scanError;
           const orphanCount = scanData?.data?.length || 0;
           addLog(`[SUCCESS] SCAN COMPLETE. DETECTED ${orphanCount} ANOMALIES.`);
-          if (orphanCount > 0) addLog(`[ALERT] RECOMMEND IMMEDIATE ADOPTION.`);
           break;
 
         case 'sync assets':
-          addLog('[CMD] ESTABLISHING SECURE UPLINK TO PINTEREST (SCOPE: FULL)...');
+          addLog('[CMD] ESTABLISHING UPLINK TO PINTEREST...');
           const { data: syncData, error: syncError } = await supabase.functions.invoke('cronos-sync', {
             body: { scope: 'full' }
           });
@@ -89,127 +136,135 @@ export default function App() {
           setLogs([]);
           break;
 
-        case 'dashboard':
-          setViewMode('DASHBOARD');
-          addLog('[UI] SWITCHING TO MAIN DASHBOARD.');
-          break;
-
-        case 'fleet':
-          setViewMode('ASSETS');
-          setSelectedMatrix(null);
-          addLog('[UI] SHOWING FULL ASSET FLEET.');
-          break;
-
         case 'help':
-          addLog('>> AVAILABLE COMMANDS: scan leaks, sync assets, dashboard, fleet, clear');
+          addLog('>> COMMANDS: bios, genesis, scan leaks, sync assets, refresh, clear');
           break;
 
         default:
-          addLog(`[ERROR] UNKNOWN COMMAND: '${command}'.`);
+          addLog(`[ERROR] UNKNOWN COMMAND: '${command}'. TRY 'help'.`);
       }
     } catch (err) {
       addLog(`[FATAL] EXECUTION FAILED: ${err instanceof Error ? err.message : 'Unknown Error'}`);
     }
   };
 
-  // === FILTER LOGIC ===
-  const filteredAssets = selectedMatrix 
-    ? assets.filter(a => a.primary_matrix_id === selectedMatrix || a.secondary_matrix_id === selectedMatrix)
-    : assets;
-
-  const handleMatrixSelect = (id: string) => {
-    if (selectedMatrix === id) {
-      setSelectedMatrix(null);
-      addLog('[FILTER] MATRIX DESELECTED.');
-    } else {
-      setSelectedMatrix(id);
-      setViewMode('ASSETS');
-      const mCode = matrices.find(m => m.id === id)?.code || 'UNKNOWN';
-      addLog(`[FILTER] FOCUSING MATRIX: ${mCode}`);
-    }
-  };
-
+  // === METRICS CALCULATION ===
   const totalRevenue = assets.reduce((sum, a) => sum + (a.cached_revenue_score || 0), 0);
   const totalTraffic = assets.reduce((sum, a) => sum + (a.cached_traffic_score || 0), 0);
 
-  // === RENDER LAYOUT ===
   return (
-    <Layout
-      // 1. TELEMETRY RAIL (Header)
-      header={
-        <div className="w-full h-full flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-3 h-3 bg-matrix-green animate-pulse shadow-[0_0_10px_#00ff41]"></div>
-            <h1 className="text-xl font-bold tracking-[0.2em] text-white">
-              SENTINEL <span className="text-matrix-green/60 text-sm">KERNEL v0.2</span>
-            </h1>
-          </div>
-          <div className="text-xs text-matrix-green/50 flex gap-4 font-mono">
-             <span>NET: ONLINE</span>
-             <span>SECURE: TRUE</span>
-             <span>Ping: 12ms</span>
+    <>
+      {/* === OVERLAY: BIOS PANEL === */}
+      {showBios && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 md:p-10">
+          <div className="w-full max-w-4xl h-[80vh] overflow-y-auto border border-matrix-green shadow-[0_0_50px_rgba(0,255,65,0.2)] bg-black relative">
+            <button 
+              onClick={() => setShowBios(false)}
+              className="absolute top-2 right-2 text-matrix-green border border-matrix-green px-2 hover:bg-matrix-green hover:text-black z-10 font-mono"
+            >
+              [X]
+            </button>
+            <BiosPanel supabase={supabase} />
           </div>
         </div>
-      }
+      )}
 
-      // 2. MAINFRAME (Center Content)
-      mainframe={
-        <div className="h-full w-full overflow-y-auto p-6 bg-gradient-to-b from-void-black to-[#0a0f0a]">
-          {loading ? (
-             <div className="flex flex-col items-center justify-center h-full gap-4 opacity-50">
-               <div className="w-12 h-12 border-4 border-matrix-green border-t-transparent rounded-full animate-spin"></div>
-               <span className="animate-pulse font-mono text-matrix-green">DECRYPTING DATA STREAMS...</span>
-             </div>
-          ) : viewMode === 'DASHBOARD' ? (
-            <div className="space-y-8 animate-[fadeIn_0.5s_ease-out]">
-              {/* METRICS */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="border border-matrix-green/30 bg-matrix-green/5 p-4 rounded shadow-[0_0_10px_rgba(0,255,65,0.05)]">
-                  <h3 className="text-xs text-matrix-green/70 uppercase">Total Revenue</h3>
-                  <div className="text-2xl font-bold text-white mt-1 font-mono">${totalRevenue.toFixed(2)}</div>
-                </div>
-                <div className="border border-matrix-green/30 bg-matrix-green/5 p-4 rounded shadow-[0_0_10px_rgba(0,255,65,0.05)]">
-                  <h3 className="text-xs text-matrix-green/70 uppercase">Traffic Mass</h3>
-                  <div className="text-2xl font-bold text-white mt-1 font-mono">{totalTraffic.toLocaleString()}</div>
-                </div>
+      {/* === OVERLAY: GENESIS MODAL === */}
+      {showGenesis && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
+          <div className="w-full max-w-lg border-2 border-hyper-violet bg-void-black p-6 shadow-[0_0_50px_rgba(147,51,234,0.3)] font-mono relative">
+            <button 
+              onClick={() => setShowGenesis(false)}
+              className="absolute top-2 right-2 text-hyper-violet border border-hyper-violet px-2 hover:bg-hyper-violet hover:text-black"
+            >
+              [CLOSE]
+            </button>
+
+            <h2 className="text-xl font-bold text-hyper-violet mb-6 border-b border-hyper-violet/30 pb-2 flex items-center gap-2">
+              <span className="animate-pulse">✦</span> GENESIS SEEDER
+            </h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs text-hyper-violet/70 mb-1">PRIMARY MATRIX (PARENT A)</label>
+                <input 
+                  value={genesisForm.pri}
+                  onChange={e => setGenesisForm(prev => ({...prev, pri: e.target.value}))}
+                  className="w-full bg-black border border-hyper-violet/50 text-white p-2 focus:outline-none focus:border-hyper-violet focus:shadow-[0_0_15px_rgba(147,51,234,0.2)] uppercase placeholder-gray-700"
+                  placeholder="CODE (Ex: TRAP26)"
+                  autoFocus
+                />
               </div>
-              {/* LEAK HUNTER */}
-              <MissionBoard supabase={supabase} />
+              <div>
+                <label className="block text-xs text-hyper-violet/70 mb-1">SECONDARY MATRIX (PARENT B)</label>
+                <input 
+                  value={genesisForm.sec}
+                  onChange={e => setGenesisForm(prev => ({...prev, sec: e.target.value}))}
+                  className="w-full bg-black border border-hyper-violet/50 text-white p-2 focus:outline-none focus:border-hyper-violet focus:shadow-[0_0_15px_rgba(147,51,234,0.2)] uppercase placeholder-gray-700"
+                  placeholder="CODE (Ex: ANUEL)"
+                />
+              </div>
+
+              {genesisStatus && (
+                <div className={`text-xs p-2 border ${genesisStatus.includes('SUCCESS') ? 'border-matrix-green text-matrix-green' : 'border-alert-red text-alert-red'}`}>
+                  {genesisStatus}
+                </div>
+              )}
+
+              <button 
+                onClick={handleGenesisSeed}
+                className="w-full py-3 bg-hyper-violet text-black font-bold uppercase tracking-widest hover:bg-white transition-colors mt-4"
+              >
+                EXECUTE CREATION
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === MAIN INTERFACE === */}
+      <Layout
+        // 1. NORTH: TELEMETRY
+        header={
+          <Telemetry 
+            totalRevenue={totalRevenue} 
+            totalTraffic={totalTraffic} 
+            assetsCount={assets.length} 
+          />
+        }
+
+        // 2. CENTER: MAINFRAME
+        mainframe={
+          loading ? (
+            <div className="w-full h-full bg-void-black flex flex-col items-center justify-center p-8 space-y-4">
+              <div className="w-16 h-16 border-4 border-t-matrix-green border-r-transparent border-b-matrix-green border-l-transparent rounded-full animate-spin"></div>
+              <div className="font-mono text-matrix-green text-sm tracking-widest animate-pulse">
+                DECODING MATRIX STREAM...
+              </div>
+              <div className="flex gap-1 h-1 w-32 bg-matrix-green/10">
+                <div className="h-full bg-matrix-green w-1/3 animate-[slideIn_1s_infinite]"></div>
+              </div>
             </div>
           ) : (
-            <div className="space-y-6 animate-[slideIn_0.3s_ease-out]">
-              <div className="flex justify-between items-end border-b border-matrix-green/20 pb-2">
-                <h2 className="text-lg font-bold text-white font-mono">
-                  ASSET FLEET {selectedMatrix && `[${matrices.find(m => m.id === selectedMatrix)?.code}]`}
-                </h2>
-                <span className="text-xs text-matrix-green/60 font-mono">{filteredAssets.length} UNITS</span>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                {filteredAssets.map(asset => (
-                  <AssetCard key={asset.id} asset={asset} />
-                ))}
-              </div>
+            <Mainframe assets={assets} />
+          )
+        }
+
+        // 3. EAST: WAR ROOM (LEAK HUNTER)
+        warRoom={
+          <div className="h-full overflow-y-auto bg-void-black border-l border-matrix-green/20 relative">
+            <div className="sticky top-0 bg-void-black/90 backdrop-blur z-10 border-b border-matrix-green/10 p-2 text-[10px] text-matrix-green/50 font-mono text-center">
+              [ INTEL_SECTOR_01 ]
             </div>
-          )}
-        </div>
-      }
+            <MissionBoard supabase={supabase} />
+          </div>
+        }
 
-      // 3. WAR ROOM (Right Sidebar)
-      warRoom={
-        <div className="h-full w-full overflow-y-auto p-4 bg-void-black">
-          <MatrixDeck 
-             matrices={matrices} 
-             selectedId={selectedMatrix || undefined}
-             onSelectMatrix={handleMatrixSelect}
-          />
-        </div>
-      }
-
-      // 4. CLI (Footer)
-      cli={
-        <CLI logs={logs} onCommand={handleCommand} />
-      }
-    />
+        // 4. SOUTH: CLI
+        cli={
+          <CLI logs={logs} onCommand={handleCommand} />
+        }
+      />
+    </>
   );
 }
