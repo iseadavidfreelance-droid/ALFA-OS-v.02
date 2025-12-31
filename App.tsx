@@ -4,6 +4,7 @@ import { Database } from './database.types';
 import Layout from './Layout';
 // Telemetry se reemplaza/integra en el nuevo Header compuesto
 import Arena from './Arena';
+import BioLab from './BioLab';
 import MissionBoard from './MissionBoard';
 import CLI from './CLI';
 import BiosPanel from './BiosPanel';
@@ -181,11 +182,24 @@ export default function App() {
           </div>
         </div>
       ) : (
-        <Arena assets={assets} />
+        assets.length > 0 ? (
+          <Arena assets={assets} />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center text-matrix-green/30 font-mono space-y-4">
+             <div className="text-4xl opacity-20">∅</div>
+             <div className="text-sm tracking-widest">LOCAL DATABASE EMPTY</div>
+             <div className="text-xs border border-matrix-green/20 px-2 py-1 cursor-pointer hover:bg-matrix-green/10 transition-colors" onClick={() => setShowGenesis(true)}>
+               [ INITIATE GENESIS ]
+             </div>
+          </div>
+        )
       );
       break;
     
     case 'BETA':
+      mainframeContent = <BioLab assets={assets} />;
+      break;
+
     case 'GAMMA':
     case 'DELTA':
       mainframeContent = (
