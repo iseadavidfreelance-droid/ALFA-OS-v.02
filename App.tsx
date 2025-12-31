@@ -5,6 +5,7 @@ import Layout from './Layout';
 // Telemetry se reemplaza/integra en el nuevo Header compuesto
 import Arena from './Arena';
 import BioLab from './BioLab';
+import Swarm from './Swarm';
 import MissionBoard from './MissionBoard';
 import CLI from './CLI';
 import BiosPanel from './BiosPanel';
@@ -201,6 +202,9 @@ export default function App() {
       break;
 
     case 'GAMMA':
+      mainframeContent = <Swarm assets={assets} />;
+      break;
+
     case 'DELTA':
       mainframeContent = (
         <div className="w-full h-full flex items-center justify-center bg-void-black border border-dashed border-matrix-green/30 p-8">
