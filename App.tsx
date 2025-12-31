@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { Database } from './database.types';
 import Layout from './Layout';
-import Telemetry from './Telemetry';
+// Telemetry se reemplaza/integra en el nuevo Header compuesto
 import Mainframe from './Mainframe';
 import MissionBoard from './MissionBoard';
 import CLI from './CLI';
 import BiosPanel from './BiosPanel';
+import SpectrumSelector, { SpectrumType } from './SpectrumSelector';
 
 // === SUPABASE CLIENT ===
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL || 'https://placeholder.supabase.co';
@@ -21,6 +22,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   
   // === STATE: UI LAYER ===
+  const [activeSpectrum, setActiveSpectrum] = useState<SpectrumType>('ALPHA');
   const [logs, setLogs] = useState<string[]>(['>> OMNISCIENT KERNEL v0.2 LOADED.', '>> WAITING FOR INPUT...']);
   const [showBios, setShowBios] = useState(false);
   const [showGenesis, setShowGenesis] = useState(false);
@@ -37,9 +39,7 @@ export default function App() {
 
   // === DATA FETCHING ===
   const fetchData = async () => {
-    // Solo mostramos loading global en la carga inicial, no en refrescos de realtime
     if (assets.length === 0) setLoading(true);
-    
     try {
       const { data, error } = await supabase
         .from('assets')
@@ -63,48 +63,25 @@ export default function App() {
   // === REALTIME NERVOUS SYSTEM ===
   useEffect(() => {
     const channel = supabase.channel('sentinel-link')
-      // 1. LISTEN: NEW TRANSACTIONS (Revenue Pulse)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'transactions' },
-        (payload) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'transactions' }, (payload) => {
           const newTx = payload.new as any;
           addLog(`[ALERT] $$$ NEW TRANSACTION DETECTED: $${newTx.amount} (ID: ${newTx.payhip_transaction_id})`);
-          
-          // Trigger Visual Alert
           setTelemetryAlert(true);
           setTimeout(() => setTelemetryAlert(false), 3000);
-
-          // Refresh Data to calculate totals correctly
           fetchData();
-        }
-      )
-      // 2. LISTEN: ASSET UPDATES (Live Score/Rarity Changes)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'assets' },
-        (payload) => {
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'assets' }, (payload) => {
           const updatedAsset = payload.new as AssetRow;
-          
-          // Optimistic UI Update: Replace the item in the array immediately
           setAssets((prevAssets) => 
             prevAssets.map((a) => a.id === updatedAsset.id ? updatedAsset : a)
-              .sort((a, b) => (b.total_score || 0) - (a.total_score || 0)) // Re-sort locally
+              .sort((a, b) => (b.total_score || 0) - (a.total_score || 0))
           );
-
           addLog(`[UPDATE] ASSET ${updatedAsset.sku_slug} METRICS REFRESHED.`);
-        }
-      )
-      // 3. LISTEN: NEW PINS (Radar Activity)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'pins' },
-        (payload) => {
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'pins' }, (payload) => {
           const newPin = payload.new as any;
           addLog(`[RADAR] NEW SIGNAL DETECTED: ${newPin.external_pin_id}. SCANNING FOR ORPHANS...`);
-          // Note: MissionBoard handles its own scan logic, but we inform the operator here.
-        }
-      )
+      })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           addLog('>> REALTIME UPLINK ESTABLISHED. LISTENING FOR EVENTS...');
@@ -126,25 +103,14 @@ export default function App() {
     
     try {
       const { data, error } = await supabase.functions.invoke('genesis-seed', {
-        body: { 
-          primary_matrix_code: genesisForm.pri.toUpperCase(), 
-          secondary_matrix_code: genesisForm.sec.toUpperCase() 
-        }
+        body: { primary_matrix_code: genesisForm.pri.toUpperCase(), secondary_matrix_code: genesisForm.sec.toUpperCase() }
       });
-
       if (error) throw error;
-      
       setGenesisStatus(`SUCCESS: ${data.data.sku_slug} CREATED.`);
       addLog(`[GENESIS] NEW ASSET BORN: ${data.data.sku_slug}`);
       setGenesisForm({ pri: '', sec: '' });
       await fetchData();
-      
-      // Auto-close after delay
-      setTimeout(() => {
-        setShowGenesis(false);
-        setGenesisStatus(null);
-      }, 1500);
-
+      setTimeout(() => { setShowGenesis(false); setGenesisStatus(null); }, 1500);
     } catch (err) {
       setGenesisStatus(`FAILURE: ${err instanceof Error ? err.message : 'Unknown'}`);
     }
@@ -161,45 +127,34 @@ export default function App() {
           setShowBios(prev => !prev);
           addLog(`[UI] BIOS PANEL ${!showBios ? 'OPENED' : 'CLOSED'}.`);
           break;
-
         case 'genesis':
           setShowGenesis(prev => !prev);
           addLog(`[UI] GENESIS PROTOCOL ${!showGenesis ? 'INITIATED' : 'ABORTED'}.`);
           break;
-
         case 'refresh':
         case 'reload':
           await fetchData();
           addLog('[SYS] MANUAL REFRESH EXECUTED.');
           break;
-
         case 'scan leaks':
           addLog('[CMD] INITIATING ORPHAN SCAN PROTOCOL...');
           const { data: scanData, error: scanError } = await supabase.functions.invoke('scan-orphans');
           if (scanError) throw scanError;
-          const orphanCount = scanData?.data?.length || 0;
-          addLog(`[SUCCESS] SCAN COMPLETE. DETECTED ${orphanCount} ANOMALIES.`);
+          addLog(`[SUCCESS] SCAN COMPLETE. DETECTED ${scanData?.data?.length || 0} ANOMALIES.`);
           break;
-
         case 'sync assets':
           addLog('[CMD] ESTABLISHING UPLINK TO PINTEREST...');
-          const { data: syncData, error: syncError } = await supabase.functions.invoke('cronos-sync', {
-            body: { scope: 'full' }
-          });
+          const { data: syncData, error: syncError } = await supabase.functions.invoke('cronos-sync', { body: { scope: 'full' } });
           if (syncError) throw syncError;
-          const synced = syncData?.results?.full_sync?.total_synced || 0;
-          addLog(`[SUCCESS] SYNC COMPLETE. ${synced} NODES UPDATED.`);
+          addLog(`[SUCCESS] SYNC COMPLETE. ${syncData?.results?.full_sync?.total_synced || 0} NODES UPDATED.`);
           await fetchData();
           break;
-
         case 'clear':
           setLogs([]);
           break;
-
         case 'help':
           addLog('>> COMMANDS: bios, genesis, scan leaks, sync assets, refresh, clear');
           break;
-
         default:
           addLog(`[ERROR] UNKNOWN COMMAND: '${command}'. TRY 'help'.`);
       }
@@ -211,6 +166,104 @@ export default function App() {
   // === METRICS CALCULATION ===
   const totalRevenue = assets.reduce((sum, a) => sum + (a.cached_revenue_score || 0), 0);
   const totalTraffic = assets.reduce((sum, a) => sum + (a.cached_traffic_score || 0), 0);
+
+  // === RENDER LOGIC: SPECTRUM SWITCH ===
+  
+  // 1. MAINFRAME CONTENT
+  let mainframeContent;
+  switch (activeSpectrum) {
+    case 'ALPHA':
+      mainframeContent = loading ? (
+        <div className="w-full h-full bg-void-black flex flex-col items-center justify-center p-8 space-y-4">
+          <div className="w-16 h-16 border-4 border-t-matrix-green border-r-transparent border-b-matrix-green border-l-transparent rounded-full animate-spin"></div>
+          <div className="font-mono text-matrix-green text-sm tracking-widest animate-pulse">
+            DECODING MATRIX STREAM...
+          </div>
+        </div>
+      ) : (
+        <Mainframe assets={assets} />
+      );
+      break;
+    
+    case 'BETA':
+    case 'GAMMA':
+    case 'DELTA':
+      mainframeContent = (
+        <div className="w-full h-full flex items-center justify-center bg-void-black border border-dashed border-matrix-green/30 p-8">
+           <div className="text-center font-mono space-y-2">
+             <div className="text-3xl animate-pulse text-matrix-green/50">⚠️</div>
+             <div className="text-matrix-green tracking-widest">
+               {`>> SPECTRUM [${activeSpectrum}] // MODULE NOT INSTALLED`}
+             </div>
+             <div className="text-xs text-matrix-green/40">ACCESS RESTRICTED BY KERNEL POLICY</div>
+           </div>
+        </div>
+      );
+      break;
+  }
+
+  // 2. WAR ROOM CONTENT
+  let warRoomContent;
+  switch (activeSpectrum) {
+    case 'ALPHA':
+      warRoomContent = (
+        <div className="h-full overflow-y-auto bg-void-black border-l border-matrix-green/20 relative">
+          <div className="sticky top-0 bg-void-black/90 backdrop-blur z-10 border-b border-matrix-green/10 p-2 text-[10px] text-matrix-green/50 font-mono text-center">
+            [ INTEL_SECTOR_01 ]
+          </div>
+          <MissionBoard supabase={supabase} />
+        </div>
+      );
+      break;
+
+    default:
+      warRoomContent = (
+        <div className="h-full w-full flex items-center justify-center bg-void-black border-l border-matrix-green/10">
+          <span className="text-xs font-mono text-matrix-green/30 animate-pulse">
+            {`>> AWAITING SIGNAL [${activeSpectrum}]...`}
+          </span>
+        </div>
+      );
+      break;
+  }
+
+  // 3. HEADER CONTENT
+  const layoutHeader = (
+    <div className={`w-full h-full flex items-center justify-between bg-void-black border-b transition-colors duration-300 ${
+      telemetryAlert ? 'border-amber-500/50 bg-amber-900/10' : 'border-matrix-green/30'
+    }`}>
+      {/* IZQUIERDA: TÍTULO */}
+      <div className="flex items-center gap-4 px-6 border-r border-matrix-green/20 h-full">
+         <div className={`w-1 h-6 animate-pulse ${telemetryAlert ? 'bg-amber-500' : 'bg-matrix-green'}`}></div>
+         <h1 className="text-sm md:text-lg font-bold tracking-[0.2em] text-white font-mono whitespace-nowrap">
+          SENTINEL <span className={`${telemetryAlert ? 'text-amber-500' : 'text-matrix-green'} text-xs opacity-80`}>INTERFACE</span>
+         </h1>
+      </div>
+
+      {/* CENTRO/DERECHA: SPECTRUM SELECTOR */}
+      <div className="flex-1 h-full flex justify-center">
+        <SpectrumSelector active={activeSpectrum} onSelect={setActiveSpectrum} />
+      </div>
+
+      {/* DERECHA EXTREMA: INDICADORES */}
+      <div className="flex items-center gap-6 px-6 h-full border-l border-matrix-green/20">
+         {/* Mini Telemetry Data */}
+         <div className="hidden lg:flex flex-col items-end text-[10px] font-mono leading-tight">
+            <span className={telemetryAlert ? 'text-white' : 'text-amber-warning'}>
+              REV: ${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+            </span>
+            <span className="text-matrix-green/70">
+              TRF: {totalTraffic.toLocaleString()}
+            </span>
+         </div>
+
+         <div className={`flex items-center gap-2 text-xs font-mono tracking-wider ${telemetryAlert ? 'text-amber-500' : 'text-matrix-green/50'}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${telemetryAlert ? 'bg-amber-500 animate-ping' : 'bg-matrix-green'}`}></span>
+            <span className="hidden md:inline">NET: ONLINE</span>
+         </div>
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -239,38 +292,34 @@ export default function App() {
             >
               [CLOSE]
             </button>
-
             <h2 className="text-xl font-bold text-hyper-violet mb-6 border-b border-hyper-violet/30 pb-2 flex items-center gap-2">
               <span className="animate-pulse">✦</span> GENESIS SEEDER
             </h2>
-
             <div className="space-y-4">
               <div>
-                <label className="block text-xs text-hyper-violet/70 mb-1">PRIMARY MATRIX (PARENT A)</label>
+                <label className="block text-xs text-hyper-violet/70 mb-1">PRIMARY MATRIX</label>
                 <input 
                   value={genesisForm.pri}
                   onChange={e => setGenesisForm(prev => ({...prev, pri: e.target.value}))}
-                  className="w-full bg-black border border-hyper-violet/50 text-white p-2 focus:outline-none focus:border-hyper-violet focus:shadow-[0_0_15px_rgba(147,51,234,0.2)] uppercase placeholder-gray-700"
+                  className="w-full bg-black border border-hyper-violet/50 text-white p-2 focus:outline-none focus:border-hyper-violet uppercase"
                   placeholder="CODE (Ex: TRAP26)"
                   autoFocus
                 />
               </div>
               <div>
-                <label className="block text-xs text-hyper-violet/70 mb-1">SECONDARY MATRIX (PARENT B)</label>
+                <label className="block text-xs text-hyper-violet/70 mb-1">SECONDARY MATRIX</label>
                 <input 
                   value={genesisForm.sec}
                   onChange={e => setGenesisForm(prev => ({...prev, sec: e.target.value}))}
-                  className="w-full bg-black border border-hyper-violet/50 text-white p-2 focus:outline-none focus:border-hyper-violet focus:shadow-[0_0_15px_rgba(147,51,234,0.2)] uppercase placeholder-gray-700"
+                  className="w-full bg-black border border-hyper-violet/50 text-white p-2 focus:outline-none focus:border-hyper-violet uppercase"
                   placeholder="CODE (Ex: ANUEL)"
                 />
               </div>
-
               {genesisStatus && (
                 <div className={`text-xs p-2 border ${genesisStatus.includes('SUCCESS') ? 'border-matrix-green text-matrix-green' : 'border-alert-red text-alert-red'}`}>
                   {genesisStatus}
                 </div>
               )}
-
               <button 
                 onClick={handleGenesisSeed}
                 className="w-full py-3 bg-hyper-violet text-black font-bold uppercase tracking-widest hover:bg-white transition-colors mt-4"
@@ -284,47 +333,17 @@ export default function App() {
 
       {/* === MAIN INTERFACE === */}
       <Layout
-        // 1. NORTH: TELEMETRY
-        header={
-          <Telemetry 
-            totalRevenue={totalRevenue} 
-            totalTraffic={totalTraffic} 
-            assetsCount={assets.length}
-            alertMode={telemetryAlert} 
-          />
-        }
+        // 1. NORTH: COMPOSITE HEADER
+        header={layoutHeader}
 
-        // 2. CENTER: MAINFRAME
-        mainframe={
-          loading ? (
-            <div className="w-full h-full bg-void-black flex flex-col items-center justify-center p-8 space-y-4">
-              <div className="w-16 h-16 border-4 border-t-matrix-green border-r-transparent border-b-matrix-green border-l-transparent rounded-full animate-spin"></div>
-              <div className="font-mono text-matrix-green text-sm tracking-widest animate-pulse">
-                DECODING MATRIX STREAM...
-              </div>
-              <div className="flex gap-1 h-1 w-32 bg-matrix-green/10">
-                <div className="h-full bg-matrix-green w-1/3 animate-[slideIn_1s_infinite]"></div>
-              </div>
-            </div>
-          ) : (
-            <Mainframe assets={assets} />
-          )
-        }
+        // 2. CENTER: MAINFRAME (SWITCHED)
+        mainframe={mainframeContent}
 
-        // 3. EAST: WAR ROOM (LEAK HUNTER)
-        warRoom={
-          <div className="h-full overflow-y-auto bg-void-black border-l border-matrix-green/20 relative">
-            <div className="sticky top-0 bg-void-black/90 backdrop-blur z-10 border-b border-matrix-green/10 p-2 text-[10px] text-matrix-green/50 font-mono text-center">
-              [ INTEL_SECTOR_01 ]
-            </div>
-            <MissionBoard supabase={supabase} />
-          </div>
-        }
+        // 3. EAST: WAR ROOM (SWITCHED)
+        warRoom={warRoomContent}
 
-        // 4. SOUTH: CLI
-        cli={
-          <CLI logs={logs} onCommand={handleCommand} />
-        }
+        // 4. SOUTH: CLI (PERSISTENT)
+        cli={<CLI logs={logs} onCommand={handleCommand} />}
       />
     </>
   );
